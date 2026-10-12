@@ -1,0 +1,20 @@
+# Build outputs
+out/
+bin/
+*.class
+
+# Dependencies
+node_modules/
+lib/*.jar
+!lib/PUT_MYSQL_DRIVER_HERE.txt
+
+# Vercel
+.vercel/
+
+# OS and Editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+*.log

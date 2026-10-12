@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Budget</title>
+<style>
+:root{--bg:#f4f5fb;--card:#fff;--text:#1b1d2a;--muted:#6b7085;--line:#e7e9f2;--accent:#6c5ce7;--accent2:#8e7dff;--green:#12b886;--red:#f0524f;--amber:#f59f00;--shadow:0 1px 2px rgba(20,22,40,.04),0 8px 24px rgba(20,22,40,.05)}
+:root[data-theme="dark"]{--bg:#0e1017;--card:#171a24;--text:#eceef7;--muted:#8d93a9;--line:#262a3a;--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+[hidden]{display:none!important}
+h1,h2,h3{margin:0}
+button,input,select{font:inherit;color:inherit}
+.muted{color:var(--muted)}
+/* auth */
+#auth{min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(900px 500px at 15% 10%,rgba(108,92,231,.28),transparent),radial-gradient(800px 500px at 90% 90%,rgba(18,184,134,.18),transparent),var(--bg)}
+.authcard{width:100%;max-width:400px;background:var(--card);border-radius:20px;padding:32px;box-shadow:var(--shadow)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;color:#fff;font-size:18px}
+.tabs{display:flex;background:var(--bg);border-radius:12px;padding:4px;margin:22px 0 8px}
+.tabs button{flex:1;border:0;background:none;padding:8px;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600}
+.tabs button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+label{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-top:14px}
+input,select{width:100%;margin-top:6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);outline:none}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,92,231,.18)}
+.btn{border:0;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600;background:var(--bg);color:var(--text);border:1px solid var(--line)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:0}
+.btn.small{padding:5px 10px;font-size:13px}
+.btn.danger{color:var(--red)}
+.btn:hover{filter:brightness(.97)}
+.full{width:100%;margin-top:20px}
+.err{background:rgba(240,82,79,.1);color:var(--red);padding:9px 12px;border-radius:10px;margin-top:14px;font-size:14px}
+/* app shell */
+.side{position:fixed;inset:0 auto 0 0;width:236px;background:var(--card);border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:4px}
+.side .brand{padding:0 8px 18px}
+.nav{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;padding:11px 12px;border-radius:12px;cursor:pointer;color:var(--muted);font-weight:600;text-align:left}
+.nav:hover{background:var(--bg)}
+.nav.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.nav i{font-style:normal;width:20px;text-align:center}
+.spacer{flex:1}
+.me{padding:12px;border-top:1px solid var(--line);margin-top:8px}
+main{margin-left:236px;padding:28px 32px 48px;max-width:1280px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.top h1{font-size:26px}
+.period{display:flex;gap:8px}
+.period select{width:auto;margin:0;font-weight:600}
+.grid{display:grid;gap:18px}
+.stats{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));margin-bottom:18px}
+.two{grid-template-columns:repeat(auto-fit,minmax(340px,1fr));margin-bottom:18px}
+.card{background:var(--card);border-radius:18px;padding:20px;box-shadow:var(--shadow)}
+.card h3{font-size:15px;margin-bottom:14px}
+.stat .lbl{color:var(--muted);font-size:13px;font-weight:600}
+.stat .val{font-size:27px;font-weight:700;margin:4px 0 8px;letter-spacing:-.5px}
+.stat.hero{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.stat.hero .lbl,.stat.hero .sub{color:rgba(255,255,255,.8)}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--bg);color:var(--muted)}
+.chip.good{background:rgba(18,184,134,.14);color:var(--green)}
+.chip.bad{background:rgba(240,82,79,.13);color:var(--red)}
+.sub{font-size:13px;color:var(--muted)}
+.donutwrap{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.legend{flex:1;min-width:150px;display:grid;gap:7px;font-size:14px}
+.legend div{display:flex;align-items:center;gap:8px}
+.legend b{margin-left:auto}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.chart{width:100%}
+.alert{padding:11px 14px;border-radius:12px;margin-bottom:10px;font-size:14px}
+.alert.red{background:rgba(240,82,79,.12);color:var(--red)}
+.alert.amber{background:rgba(245,159,0,.15);color:#b87500}
+:root[data-theme="dark"] .alert.amber{color:var(--amber)}
+.bar{height:9px;background:var(--bg);border-radius:99px;overflow:hidden;margin:7px 0 4px}
+.bar span{display:block;height:100%;border-radius:99px;background:var(--green)}
+.bar.amber span{background:var(--amber)}.bar.red span{background:var(--red)}
+.brow{margin-bottom:16px}
+.brow .h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px}
+.pill.OK{background:rgba(18,184,134,.14);color:var(--green)}.pill.WARNING{background:rgba(245,159,0,.17);color:#b87500}.pill.EXCEEDED{background:rgba(240,82,79,.14);color:var(--red)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.r{text-align:right}.inc{color:var(--green);font-weight:600}.exp{color:var(--red);font-weight:600}
+.badge{font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px}
+.badge.INCOME{background:rgba(18,184,134,.14);color:var(--green)}.badge.EXPENSE{background:rgba(240,82,79,.13);color:var(--red)}
+.tablewrap{overflow-x:auto}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+.toolbar>div{min-width:130px}
+.toolbar label{margin-top:0}
+.actions{white-space:nowrap}
+.empty{text-align:center;color:var(--muted);padding:34px 10px}
+.goals{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row.end{justify-content:flex-end;margin-top:20px}
+.modalbg{position:fixed;inset:0;background:rgba(10,12,20,.5);display:grid;place-items:center;padding:16px;z-index:50}
+.modal{background:var(--card);border-radius:18px;padding:24px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.modal h3{font-size:18px;margin-bottom:4px}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:grid;gap:8px;z-index:60}
+.toast{background:#1b1d2a;color:#fff;padding:10px 18px;border-radius:12px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.toast.bad{background:var(--red)}
+@media(max-width:860px){
+ .side{position:static;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px;border-right:0;border-bottom:1px solid var(--line)}
+ .side .brand{padding:0 8px 0 0}.nav{width:auto;padding:8px 10px}.nav span{display:none}.spacer{display:none}
+ .me{border:0;margin:0;padding:0 0 0 auto;display:flex;gap:8px;align-items:center}
+ main{margin-left:0;padding:18px 14px 40px}
+}
+</style>
+</head>
+<body>
+
+<div id="auth" hidden>
+  <div class="authcard">
+    <div class="brand"><div class="logo">₹</div> Smart Budget</div>
+    <p class="muted" style="margin:8px 0 0">Track income, expenses, budgets and savings.</p>
+    <div class="tabs"><button id="tab-login" class="on">Log in</button><button id="tab-register">Create account</button></div>
+    <form id="authform">
+      <div id="namefield" hidden><label>Full name<input name="name" maxlength="100" autocomplete="name"></label></div>
+      <label>Email<input name="email" type="email" required autocomplete="email"></label>
+      <label>Password<input name="password" type="password" required minlength="6" autocomplete="current-password"></label>
+      <div class="err" id="autherr" hidden></div>
+      <button class="btn primary full" id="authbtn">Log in</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <aside class="side">
+    <div class="brand"><div class="logo">₹</div> <span>Smart Budget</span></div>
+    <button class="nav" data-page="dashboard"><i>◧</i><span>Dashboard</span></button>
+    <button class="nav" data-page="transactions"><i>⇄</i><span>Transactions</span></button>
+    <button class="nav" data-page="budgets"><i>◔</i><span>Budgets</span></button>
+    <button class="nav" data-page="goals"><i>★</i><span>Savings goals</span></button>
+    <button class="nav" data-page="reports"><i>▤</i><span>Reports</span></button>
+    <div class="spacer"></div>
+    <div class="me">
+      <div style="font-weight:600" id="username"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small" id="themebtn" title="Switch theme">◐</button>
+        <button class="btn small" id="logout">Log out</button>
+      </div>
+    </div>
+  </aside>
+  <main>
+    <div class="top">
+      <h1 id="title"></h1>
+      <div class="period" id="period"><select id="month"></select><select id="year"></select></div>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="toast"></div>
+
+<script>
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const COLORS=['#6c5ce7','#12b886','#f59f00','#f0524f','#339af0','#e64980','#20c997','#845ef7','#fd7e14'];
+const now=new Date();
+const S={page:'dashboard',month:now.getMonth()+1,year:now.getFullYear(),tf:{scope:'month',type:'',categoryId:'',from:'',to:''},rm:now.getMonth()+1};
+const $=(s,el=document)=>el.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>'₹'+Number(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const compact=n=>'₹'+new Intl.NumberFormat('en-IN',{notation:'compact',maximumFractionDigits:1}).format(n);
+const today=()=>new Date().toLocaleDateString('en-CA');
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const view=$('#view');
+
+/* ---------- helpers ---------- */
+function toast(msg,bad){const t=document.createElement('div');t.className='toast'+(bad?' bad':'');t.textContent=msg;$('#toast').appendChild(t);setTimeout(()=>t.remove(),2800);}
+async function api(path,opts={}){
+  const o={credentials:'same-origin'};
+  if(opts.data){o.method='POST';o.headers={'Content-Type':'application/x-www-form-urlencoded'};
+    const clean={};for(const k in opts.data){if(opts.data[k]!==undefined&&opts.data[k]!==null)clean[k]=opts.data[k];}
+    o.body=new URLSearchParams(clean).toString();}
+  let r,j;
+  try{r=await fetch('/api'+path,o);j=await r.json();}catch(e){throw new Error('Cannot reach the server. Is it running?');}
+  if(r.status===401&&!path.startsWith('/login')&&!path.startsWith('/register')){showAuth();throw new Error('Please log in');}
+  if(!r.ok)throw new Error(j.error||'Request failed');
+  return j;
+}
+function modal(title,html,onSubmit){
+  const bg=document.createElement('div');bg.className='modalbg';
+  bg.innerHTML='<form class="modal"><h3>'+title+'</h3>'+html+'<div class="err" hidden></div><div class="row end"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div></form>';
+  document.body.appendChild(bg);
+  const f=$('form',bg),close=()=>bg.remove();
+  $('[data-close]',bg).onclick=close;
+  bg.addEventListener('mousedown',e=>{if(e.target===bg)close();});
+  f.onsubmit=async e=>{e.preventDefault();const err=$('.err',bg);err.hidden=true;
+    try{await onSubmit(Object.fromEntries(new FormData(f)));close();}catch(x){err.textContent=x.message;err.hidden=false;}};
+  const first=$('input,select',f);if(first)first.focus();
+  return {f,close};
+}
+const setup=(cv,w,h)=>{const d=window.devicePixelRatio||1;cv.width=w*d;cv.height=h*d;cv.style.width=w+'px';cv.style.height=h+'px';const g=cv.getContext('2d');g.scale(d,d);return g;};
+function niceMax(v){const p=Math.pow(10,Math.floor(Math.log10(v)));const n=v/p;return(n<=1?1:n<=2?2:n<=5?5:10)*p;}
+
+/* ---------- charts (plain canvas) ---------- */
+function drawDonut(cv,items){
+  const size=180,g=setup(cv,size,size),c=size/2,r=70;
+  const total=items.reduce((s,i)=>s+i.value,0);
+  g.lineWidth=24;g.textAlign='center';
+  if(!total){g.strokeStyle=css('--line');g.beginPath();g.arc(c,c,r,0,Math.PI*2);g.stroke();
+    g.fillStyle=css('--muted');g.font='13px system-ui';g.fillText('No spending',c,c+4);return;}
+  let a=-Math.PI/2;
+  items.forEach((it,i)=>{const ang=it.value/total*Math.PI*2;g.strokeStyle=COLORS[i%COLORS.length];g.beginPath();
+    g.arc(c,c,r,a,a+Math.max(ang-(items.length>1?0.04:0),0.01));g.stroke();a+=ang;});
+  g.fillStyle=css('--text');g.font='700 16px system-ui';g.fillText(compact(total),c,c+2);
+  g.fillStyle=css('--muted');g.font='12px system-ui';g.fillText('spent',c,c+19);
+}
+function drawBars(cv,labels,a,b){
+  const w=cv.parentElement.clientWidth||600,h=230,g=setup(cv,w,h);
+  const L=52,B=26,T=8,R=6,max=niceMax(Math.max(1,...a,...b)),ph=h-T-B;
+  g.font='11px system-ui';g.textAlign='right';g.strokeStyle=css('--line');g.fillStyle=css('--muted');g.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=T+ph*(1-i/4);g.beginPath();g.moveTo(L,y);g.lineTo(w-R,y);g.stroke();g.fillText(compact(max*i/4),L-6,y+4);}
+  const gw=(w-L-R)/labels.length,bw=Math.min(18,gw/3);g.textAlign='center';
+  labels.forEach((lb,i)=>{const x=L+gw*i+gw/2;
+    [[a[i],'#12b886',-bw-1],[b[i],'#f0524f',1]].forEach(([v,col,dx])=>{const bh=ph*v/max;g.fillStyle=col;g.fillRect(x+dx,T+ph-bh,bw,bh);});
+    g.fillStyle=css('--muted');g.fillText(lb,x,h-8);});
+}
+const legend2='<div class="row" style="margin-bottom:8px;font-size:13px"><span><span class="dot" style="background:#12b886;display:inline-block"></span> Income</span><span><span class="dot" style="background:#f0524f;display:inline-block"></span> Expenses</span></div>';
+
+/* ---------- pages ---------- */
+const pages={dashboard,transactions,budgets,goals,reports};
+const TITLES={dashboard:'Dashboard',transactions:'Transactions',budgets:'Budgets',goals:'Savings goals',reports:'Reports'};
+
+async function dashboard(){
+  const d=await api('/dashboard?month='+S.month+'&year='+S.year);
+  const chip=(ch,goodUp)=>ch===null?'<span class="chip">no data last month</span>':'<span class="chip '+((ch>=0)===goodUp?'good':'bad')+'">'+(ch>=0?'▲':'▼')+' '+Math.abs(ch)+'% vs last month</span>';
+  const stat=(l,v,sub,cls)=>'<div class="card stat '+(cls||'')+'"><div class="lbl">'+l+'</div><div class="val">'+fmt(v)+'</div><div>'+sub+'</div></div>';
+  const alerts=d.budgets.filter(b=>b.status!=='OK').map(b=>b.status==='EXCEEDED'
+    ?'<div class="alert red">⚠ <b>'+esc(b.category_name)+'</b> budget exceeded by '+fmt(-b.remaining)+'</div>'
+    :'<div class="alert amber">● <b>'+esc(b.category_name)+'</b> has used '+b.percent+'% of its budget</div>').join('');
+  const cats=d.categories.map(c=>({name:c.category_name,value:Number(c.total)}));
+  const totalCat=cats.reduce((s,c)=>s+c.value,0);
+  view.innerHTML=alerts+
+   '<div class="grid stats">'+
+    stat('Income',d.income,chip(d.incomeChange,true))+
+    stat('Expenses',d.expense,chip(d.expenseChange,false))+
+    stat('Remaining balance',d.balance,'<span class="sub">Income − expenses this month</span>','hero')+
+    stat('Total savings',d.totalSavings,'<span class="sub">All-time income − expenses</span>')+
+   '</div><div class="grid two">'+
+    '<div class="card"><h3>Spending by category</h3><div class="donutwrap"><canvas id="donut"></canvas><div class="legend">'+
+      (cats.length?cats.map((c,i)=>'<div><span class="dot" style="background:'+COLORS[i%COLORS.length]+'"></span>'+esc(c.name)+'<b>'+Math.round(c.value*100/totalCat)+'%</b></div>').join(''):'<span class="muted">Add an expense to see the breakdown.</span>')+
+    '</div></div></div>'+
+    '<div class="card"><h3>Income vs expenses · last 6 months</h3>'+legend2+'<div class="chart"><canvas id="bars"></canvas></div></div>'+
+   '</div><div class="card"><h3>Budget utilization · '+MONTHS[S.month-1]+' '+S.year+'</h3>'+budgetRows(d.budgets,'Set a budget on the Budgets page to track your limits here.')+'</div>';
+  drawDonut($('#donut'),cats);
+  drawBars($('#bars'),d.trend.map(t=>MONTHS[t.month-1].slice(0,3)),d.trend.map(t=>Number(t.income)),d.trend.map(t=>Number(t.expense)));
+}
+function budgetRows(list,emptyMsg,withActions){
+  if(!list.length)return '<div class="empty">'+emptyMsg+'</div>';
+  return list.map(b=>{const cls=b.status==='EXCEEDED'?'red':b.status==='WARNING'?'amber':'';
+    return '<div class="brow"><div class="h"><div><b>'+esc(b.category_name)+'</b><span class="pill '+b.status+'">'+(b.status==='OK'?'On track':b.status==='WARNING'?'Warning':'Exceeded')+'</span></div>'+
+      '<div class="sub">'+fmt(b.spent)+' of '+fmt(b.monthly_limit)+'</div></div>'+
+      '<div class="bar '+cls+'"><span style="width:'+Math.min(b.percent,100)+'%"></span></div>'+
+      '<div class="h"><span class="sub">'+b.percent+'% used · '+(b.remaining>=0?fmt(b.remaining)+' left':fmt(-b.remaining)+' over')+'</span>'+
+      (withActions?'<span class="actions"><button class="btn small" data-bedit="'+b.budget_id+'">Edit</button> <button class="btn small danger" data-bdel="'+b.budget_id+'">Delete</button></span>':'')+'</div></div>';}).join('');
+}
+
+async function transactions(){
+  const f=S.tf,q=new URLSearchParams();
+  if(f.scope==='month'){q.set('month',S.month);q.set('year',S.year);}
+  if(f.scope==='year'){q.set('year',S.year);}
+  ['type','categoryId','from','to'].forEach(k=>{if(f[k])q.set(k,f[k]);});
+  const [cats,res]=await Promise.all([api('/categories'),api('/transactions?'+q)]);
+  const sel=(v,o)=>o.map(([val,lab])=>'<option value="'+val+'"'+(String(f[v])===String(val)?' selected':'')+'>'+lab+'</option>').join('');
+  view.innerHTML=
+   '<div class="card"><div class="toolbar">'+
+    '<div><label>Period</label><select id="f-scope">'+sel('scope',[['month',MONTHS[S.month-1]+' '+S.year],['year','Whole '+S.year],['all','All time']])+'</select></div>'+
+    '<div><label>Type</label><select id="f-type">'+sel('type',[['','All'],['EXPENSE','Expenses'],['INCOME','Income']])+'</select></div>'+
+    '<div><label>Category</label><select id="f-cat">'+sel('categoryId',[['','All']].concat(cats.map(c=>[c.category_id,esc(c.category_name)+(c.type==='INCOME'?' (income)':'')])))+'</select></div>'+
+    '<div><label>From</label><input type="date" id="f-from" value="'+f.from+'"></div>'+
+    '<div><label>To</label><input type="date" id="f-to" value="'+f.to+'"></div>'+
+    '<div style="flex:1"></div><button class="btn" id="addcat">+ Category</button><button class="btn primary" id="addtx">+ Add transaction</button>'+
+   '</div>'+
+   '<div class="row" style="margin-bottom:10px"><span class="chip good">Income '+fmt(res.income)+'</span><span class="chip bad">Expenses '+fmt(res.expense)+'</span><span class="chip">'+res.items.length+' records</span></div>'+
+   (res.items.length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Type</th><th class="r">Amount</th><th></th></tr></thead><tbody>'+
+    res.items.map(t=>'<tr><td>'+t.transaction_date+'</td><td>'+esc(t.category_name)+'</td><td class="muted">'+esc(t.description||'')+'</td><td><span class="badge '+t.type+'">'+(t.type==='INCOME'?'Income':'Expense')+'</span></td>'+
+     '<td class="r '+(t.type==='INCOME'?'inc':'exp')+'">'+(t.type==='INCOME'?'+':'−')+fmt(t.amount)+'</td>'+
+     '<td class="actions r"><button class="btn small" data-edit="'+t.transaction_id+'">Edit</button> <button class="btn small danger" data-del="'+t.transaction_id+'">Delete</button></td></tr>').join('')+
+    '</tbody></table></div>':'<div class="empty">No transactions found. Click “Add transaction” to create one.</div>')+'</div>';
+  const bind=(id,key)=>{$(id).onchange=e=>{f[key]=e.target.value;transactions();};};
+  bind('#f-scope','scope');bind('#f-type','type');bind('#f-cat','categoryId');bind('#f-from','from');bind('#f-to','to');
+  $('#addtx').onclick=()=>txForm(null);
+  $('#addcat').onclick=catForm;
+  view.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>txForm(res.items.find(i=>i.transaction_id==b.dataset.edit)));
+  view.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Delete this transaction? This cannot be undone.'))return;
+    try{await api('/transactions/delete',{data:{id:b.dataset.del}});toast('Transaction deleted');render();}catch(e){toast(e.message,true);}});
+}
+async function txForm(tx){
+  const cats=await api('/categories');
+  const opts=t=>cats.filter(c=>c.type===t).map(c=>'<option value="'+c.category_id+'">'+esc(c.category_name)+'</option>').join('');
+  const m=modal(tx?'Edit transaction':'Add transaction',
+   '<label>Type<select name="type"><option value="EXPENSE">Expense</option><option value="INCOME">Income</option></select></label>'+
+   '<label>Category<select name="categoryId"></select></label>'+
+   '<label>Amount (₹)<input name="amount" type="number" step="0.01" min="0.01" required></label>'+
+   '<label>Date<input name="date" type="date" required></label>'+
+   '<label>Description<input name="description" maxlength="255" placeholder="Optional"></label>',
+   async v=>{await api('/transactions/save',{data:Object.assign({},v,{id:tx?tx.transaction_id:''})});toast(tx?'Transaction updated':'Transaction added');render();});
+  const E=m.f.elements,fill=()=>{E['categoryId'].innerHTML=opts(E['type'].value);};
+  E['type'].onchange=fill;E['type'].value=tx?tx.type:'EXPENSE';fill();
+  if(tx){E['categoryId'].value=tx.category_id;E['amount'].value=tx.amount;E['date'].value=tx.transaction_date;E['description'].value=tx.description||'';}
+  else E['date'].value=today();
+}
+function catForm(){
+  modal('New category','<label>Name<input name="name" maxlength="50" required></label><label>Type<select name="type"><option value="EXPENSE">Expense</option><option value="INCOME">Income</option></select></label>',
+   async v=>{await api('/categories/add',{data:v});toast('Category added');});
+}
+
+async function budgets(){
+  const list=await api('/budgets?month='+S.month+'&year='+S.year);
+  view.innerHTML='<div class="card"><div class="toolbar"><div><h3 style="margin:0">'+MONTHS[S.month-1]+' '+S.year+'</h3><span class="sub">Warning at 80% · alert when the limit is exceeded</span></div><div style="flex:1"></div><button class="btn primary" id="addb">+ Set budget</button></div>'+
+    budgetRows(list,'No budgets for this month yet. Click “Set budget” to add one.',true)+'</div>';
+  $('#addb').onclick=()=>budgetForm(null);
+  view.querySelectorAll('[data-bedit]').forEach(b=>b.onclick=()=>budgetForm(list.find(x=>x.budget_id==b.dataset.bedit)));
+  view.querySelectorAll('[data-bdel]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Delete this budget?'))return;
+    try{await api('/budgets/delete',{data:{id:b.dataset.bdel}});toast('Budget deleted');render();}catch(e){toast(e.message,true);}});
+}
+async function budgetForm(b){
+  const cats=b?[]:await api('/categories?type=EXPENSE');
+  const m=modal(b?'Edit budget':'Set budget',
+   (b?'<p class="muted" style="margin:6px 0 0">'+esc(b.category_name)+' · '+MONTHS[S.month-1]+' '+S.year+'</p>'
+     :'<label>Category<select name="categoryId">'+cats.map(c=>'<option value="'+c.category_id+'">'+esc(c.category_name)+'</option>').join('')+'</select></label><p class="muted" style="margin:10px 0 0">For '+MONTHS[S.month-1]+' '+S.year+'</p>')+
+   '<label>Monthly limit (₹)<input name="limit" type="number" step="0.01" min="0.01" required></label>',
+   async v=>{await api('/budgets/save',{data:Object.assign({},v,{id:b?b.budget_id:'',month:S.month,year:S.year})});toast('Budget saved');render();});
+  if(b)m.f.elements['limit'].value=b.monthly_limit;
+}
+
+async function goals(){
+  const list=await api('/goals');
+  view.innerHTML='<div class="toolbar"><div style="flex:1"></div><button class="btn primary" id="addg">+ New goal</button></div>'+
+   (list.length?'<div class="grid goals">'+list.map(g=>{const done=g.percent>=100;
+     return '<div class="card"><div class="h" style="display:flex;justify-content:space-between;gap:8px"><h3 style="margin:0">'+esc(g.goal_name)+'</h3><span class="chip '+(done?'good':'')+'">'+(done?'Goal reached 🎉':g.daysLeft<0?'Past deadline':g.daysLeft+' days left')+'</span></div>'+
+      '<div class="val" style="font-size:24px;font-weight:700;margin:12px 0 2px">'+fmt(g.saved_amount)+'</div><div class="sub">of '+fmt(g.target_amount)+' · due '+g.deadline+'</div>'+
+      '<div class="bar '+(done?'':'')+'"><span style="width:'+g.percent+'%"></span></div><div class="sub">'+g.percent+'% · '+fmt(g.remaining)+' to go</div>'+
+      '<div class="row" style="margin-top:14px"><button class="btn small primary" data-dep="'+g.goal_id+'">+ Add money</button><button class="btn small" data-gedit="'+g.goal_id+'">Edit</button><button class="btn small danger" data-gdel="'+g.goal_id+'">Delete</button></div></div>';}).join('')+'</div>'
+    :'<div class="card empty">No savings goals yet. Create one to start tracking your progress.</div>');
+  $('#addg').onclick=()=>goalForm(null);
+  view.querySelectorAll('[data-gedit]').forEach(b=>b.onclick=()=>goalForm(list.find(x=>x.goal_id==b.dataset.gedit)));
+  view.querySelectorAll('[data-dep]').forEach(b=>b.onclick=()=>modal('Add money to goal','<label>Amount (₹)<input name="amount" type="number" step="0.01" min="0.01" required></label>',
+    async v=>{await api('/goals/deposit',{data:{id:b.dataset.dep,amount:v.amount}});toast('Savings updated');render();}));
+  view.querySelectorAll('[data-gdel]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Delete this goal?'))return;
+    try{await api('/goals/delete',{data:{id:b.dataset.gdel}});toast('Goal deleted');render();}catch(e){toast(e.message,true);}});
+}
+function goalForm(g){
+  const m=modal(g?'Edit goal':'New savings goal',
+   '<label>Goal name<input name="name" maxlength="100" required placeholder="e.g. New laptop"></label>'+
+   '<label>Target amount (₹)<input name="target" type="number" step="0.01" min="0.01" required></label>'+
+   '<label>Saved so far (₹)<input name="saved" type="number" step="0.01" min="0" value="0"></label>'+
+   '<label>Deadline<input name="deadline" type="date" required></label>',
+   async v=>{await api('/goals/save',{data:Object.assign({},v,{id:g?g.goal_id:''})});toast('Goal saved');render();});
+  if(g){const E=m.f.elements;E['name'].value=g.goal_name;E['target'].value=g.target_amount;E['saved'].value=g.saved_amount;E['deadline'].value=g.deadline;}
+}
+
+async function reports(){
+  const r=await api('/report?month='+S.rm+'&year='+S.year);
+  const share=(rows)=>{const t=rows.reduce((s,x)=>s+Number(x.total),0);
+    return rows.length?'<table><thead><tr><th>Category</th><th class="r">Entries</th><th class="r">Total</th><th style="width:30%">Share</th></tr></thead><tbody>'+rows.map((x,i)=>{const p=Math.round(Number(x.total)*100/t);
+      return '<tr><td>'+esc(x.category_name)+'</td><td class="r muted">'+x.entries+'</td><td class="r"><b>'+fmt(x.total)+'</b></td><td><div class="bar"><span style="width:'+p+'%;background:'+COLORS[i%COLORS.length]+'"></span></div><span class="sub">'+p+'%</span></td></tr>';}).join('')+'</tbody></table>':'<div class="empty">No records for this period.</div>';};
+  const period=S.rm===0?'Whole year '+S.year:MONTHS[S.rm-1]+' '+S.year;
+  view.innerHTML='<div class="toolbar"><div><label>Month</label><select id="r-month"><option value="0">Whole year</option>'+MONTHS.map((m,i)=>'<option value="'+(i+1)+'"'+(S.rm===i+1?' selected':'')+'>'+m+'</option>').join('')+'</select></div><div class="sub" style="padding-bottom:10px">Summary for <b>'+period+'</b> (year follows the selector at the top)</div></div>'+
+   '<div class="grid stats"><div class="card stat"><div class="lbl">Total income</div><div class="val" style="color:var(--green)">'+fmt(r.income)+'</div></div>'+
+   '<div class="card stat"><div class="lbl">Total expenses</div><div class="val" style="color:var(--red)">'+fmt(r.expense)+'</div></div>'+
+   '<div class="card stat hero"><div class="lbl">Net (income − expenses)</div><div class="val">'+fmt(r.net)+'</div></div></div>'+
+   '<div class="grid two"><div class="card"><h3>Expenses by category</h3><div class="tablewrap">'+share(r.expenseByCategory)+'</div></div><div class="card"><h3>Income by source</h3><div class="tablewrap">'+share(r.incomeByCategory)+'</div></div></div>'+
+   '<div class="card"><h3>Income vs expenses · '+S.year+'</h3>'+legend2+'<div class="chart"><canvas id="ybars"></canvas></div></div>';
+  $('#r-month').onchange=e=>{S.rm=Number(e.target.value);reports();};
+  drawBars($('#ybars'),MONTHS.map(m=>m.slice(0,3)),r.monthly.map(x=>Number(x.income)),r.monthly.map(x=>Number(x.expense)));
+}
+
+/* ---------- shell ---------- */
+async function render(){
+  document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.page===S.page));
+  $('#title').textContent=TITLES[S.page];
+  $('#period').hidden=(S.page==='goals');
+  $('#month').hidden=(S.page==='reports');   // reports has its own month picker
+  try{await pages[S.page]();}
+  catch(e){if(e.message!=='Please log in')view.innerHTML='<div class="card"><div class="alert red">'+esc(e.message)+'</div></div>';}
+}
+function showApp(name){$('#auth').hidden=true;$('#app').hidden=false;$('#username').textContent=name;render();}
+function showAuth(){$('#app').hidden=true;$('#auth').hidden=false;}
+
+let mode='login';
+function setMode(m){mode=m;$('#tab-login').classList.toggle('on',m==='login');$('#tab-register').classList.toggle('on',m==='register');
+  $('#namefield').hidden=m!=='register';$('#authbtn').textContent=m==='login'?'Log in':'Create account';$('#autherr').hidden=true;}
+$('#tab-login').onclick=()=>setMode('login');
+$('#tab-register').onclick=()=>setMode('register');
+$('#authform').onsubmit=async e=>{
+  e.preventDefault();const err=$('#autherr');err.hidden=true;
+  const v=Object.fromEntries(new FormData(e.target));
+  try{const r=await api(mode==='login'?'/login':'/register',{data:v});e.target.reset();showApp(r.name);}
+  catch(x){err.textContent=x.message;err.hidden=false;}
+};
+$('#logout').onclick=async()=>{try{await api('/logout',{data:{}});}catch(e){}showAuth();setMode('login');};
+document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>{S.page=n.dataset.page;render();});
+$('#themebtn').onclick=()=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=t;try{localStorage.setItem('theme',t);}catch(e){}render();};
+try{const t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}
+
+const ms=$('#month'),ys=$('#year');
+ms.innerHTML=MONTHS.map((m,i)=>'<option value="'+(i+1)+'">'+m+'</option>').join('');
+for(let y=S.year-5;y<=S.year+1;y++)ys.innerHTML+='<option value="'+y+'">'+y+'</option>';
+ms.value=S.month;ys.value=S.year;
+ms.onchange=()=>{S.month=Number(ms.value);render();};
+ys.onchange=()=>{S.year=Number(ys.value);render();};
+window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(()=>{if(!$('#app').hidden&&(S.page==='dashboard'||S.page==='reports'))render();},250);});
+
+api('/me').then(r=>showApp(r.name)).catch(()=>showAuth());
+</script>
+</body>
+</html>
