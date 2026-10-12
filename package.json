@@ -4,7 +4,7 @@
   "description": "Smart Budget Management System with browser dashboard and API backend",
   "main": "api/index.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node local-server.js",
     "test": "node --test"
   },
   "keywords": ["budget", "finance", "management", "dashboard"],

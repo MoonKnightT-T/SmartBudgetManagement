@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 // --- Helper Functions ---
 function hashPassword(password) {
@@ -96,7 +98,9 @@ module.exports = async function handler(req, res) {
 
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   let pathname = parsedUrl.pathname;
-  if (pathname.startsWith('/api')) {
+  if (req.query && req.query.path) {
+    pathname = '/' + (Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path);
+  } else if (pathname.startsWith('/api')) {
     pathname = pathname.substring(4);
   }
   if (!pathname.startsWith('/')) pathname = '/' + pathname;
@@ -128,6 +132,18 @@ module.exports = async function handler(req, res) {
       return false;
     }
     return true;
+  }
+
+  if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+    let file = path.join(__dirname, '..', 'public', 'index.html');
+    if (!fs.existsSync(file)) {
+      file = path.join(__dirname, '..', 'web', 'index.html');
+    }
+    if (fs.existsSync(file)) {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.end(fs.readFileSync(file));
+    }
   }
 
   const endpoint = `${req.method} ${pathname}`;
