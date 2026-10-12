@@ -1,8 +1,19 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+let mysql = null;
+try {
+  mysql = require('mysql2/promise');
+} catch {}
 
-// --- Helper Functions ---
+let blob = null;
+try {
+  blob = require('@vercel/blob');
+} catch {}
+
+const SESSION_SECRET = process.env.SESSION_SECRET || 'smart-budget-production-secret-key-2026';
+
+// --- Cryptography & Session Helpers ---
 function hashPassword(password) {
   const salt = crypto.randomBytes(16);
   const hash = crypto.pbkdf2Sync(password, salt, 65536, 32, 'sha256');
@@ -16,6 +27,29 @@ function verifyPassword(password, stored) {
   const expected = Buffer.from(parts[1], 'base64');
   const actual = crypto.pbkdf2Sync(password, salt, 65536, 32, 'sha256');
   return crypto.timingSafeEqual(expected, actual);
+}
+
+function signSession(userId, name) {
+  const payload = Buffer.from(JSON.stringify({ userId, name })).toString('base64url');
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifySession(token) {
+  if (!token) return null;
+  const dot = token.lastIndexOf('.');
+  if (dot === -1) return null;
+  const payload = token.substring(0, dot);
+  const sig = token.substring(dot + 1);
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (sig !== expected) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data.userId || !data.name) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 function parseCookies(cookieHeader) {
@@ -35,38 +69,115 @@ function getTodayString() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// In-Memory Database store (active when no external MySQL is configured)
+// --- Initial Seed & Store ---
+let initialData = { users: [], categories: [], transactions: [], budgets: [], goals: [] };
+try {
+  const seedFile = path.join(__dirname, '..', 'seed-data.json');
+  if (fs.existsSync(seedFile)) {
+    initialData = JSON.parse(fs.readFileSync(seedFile, 'utf8'));
+  }
+} catch (e) {
+  console.error('Failed to load seed-data.json:', e);
+}
+
 const store = {
-  users: [],
-  categories: [
-    { category_id: 1, user_id: null, category_name: 'Food', type: 'EXPENSE' },
-    { category_id: 2, user_id: null, category_name: 'Travel', type: 'EXPENSE' },
-    { category_id: 3, user_id: null, category_name: 'Shopping', type: 'EXPENSE' },
-    { category_id: 4, user_id: null, category_name: 'Education', type: 'EXPENSE' },
-    { category_id: 5, user_id: null, category_name: 'Bills', type: 'EXPENSE' },
-    { category_id: 6, user_id: null, category_name: 'Healthcare', type: 'EXPENSE' },
-    { category_id: 7, user_id: null, category_name: 'Entertainment', type: 'EXPENSE' },
-    { category_id: 8, user_id: null, category_name: 'Other', type: 'EXPENSE' },
-    { category_id: 9, user_id: null, category_name: 'Salary', type: 'INCOME' },
-    { category_id: 10, user_id: null, category_name: 'Freelance', type: 'INCOME' },
-    { category_id: 11, user_id: null, category_name: 'Investment', type: 'INCOME' },
-    { category_id: 12, user_id: null, category_name: 'Gift', type: 'INCOME' },
-    { category_id: 13, user_id: null, category_name: 'Other', type: 'INCOME' }
-  ],
-  transactions: [],
-  budgets: [],
-  goals: [],
-  sessions: new Map(),
-  nextUserId: 1,
-  nextCatId: 100,
-  nextTxId: 1,
-  nextBudgetId: 1,
-  nextGoalId: 1
+  users: initialData.users || [],
+  categories: initialData.categories || [],
+  transactions: initialData.transactions || [],
+  budgets: initialData.budgets || [],
+  goals: initialData.goals || [],
+  nextUserId: Math.max(1, ...((initialData.users || []).map(u => u.user_id + 1))),
+  nextCatId: Math.max(100, ...((initialData.categories || []).map(c => c.category_id + 1))),
+  nextTxId: Math.max(1, ...((initialData.transactions || []).map(t => t.transaction_id + 1))),
+  nextBudgetId: Math.max(1, ...((initialData.budgets || []).map(b => b.budget_id + 1))),
+  nextGoalId: Math.max(1, ...((initialData.goals || []).map(g => g.goal_id + 1)))
 };
+
+let isBlobLoaded = false;
+async function ensureBlobLoaded() {
+  if (isBlobLoaded) return;
+  if (blob && (process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN)) {
+    try {
+      const result = await blob.get('smart_budget_data.json', { access: 'private' });
+      if (result && result.stream) {
+        const chunks = [];
+        for await (const chunk of result.stream) {
+          chunks.push(chunk);
+        }
+        const text = Buffer.concat(chunks).toString('utf8');
+        const data = JSON.parse(text);
+        if (data.users && data.users.length) store.users = data.users;
+        if (data.categories && data.categories.length) store.categories = data.categories;
+        if (data.transactions) store.transactions = data.transactions;
+        if (data.budgets) store.budgets = data.budgets;
+        if (data.goals) store.goals = data.goals;
+        if (data.nextUserId) store.nextUserId = data.nextUserId;
+        if (data.nextCatId) store.nextCatId = data.nextCatId;
+        if (data.nextTxId) store.nextTxId = data.nextTxId;
+        if (data.nextBudgetId) store.nextBudgetId = data.nextBudgetId;
+        if (data.nextGoalId) store.nextGoalId = data.nextGoalId;
+      }
+    } catch (e) {
+      console.warn('Blob read warning:', e.message);
+    }
+  }
+  isBlobLoaded = true;
+}
+
+async function persistBlob() {
+  if (blob && (process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN)) {
+    try {
+      const data = {
+        users: store.users,
+        categories: store.categories,
+        transactions: store.transactions,
+        budgets: store.budgets,
+        goals: store.goals,
+        nextUserId: store.nextUserId,
+        nextCatId: store.nextCatId,
+        nextTxId: store.nextTxId,
+        nextBudgetId: store.nextBudgetId,
+        nextGoalId: store.nextGoalId
+      };
+      await blob.put('smart_budget_data.json', JSON.stringify(data), { access: 'private', addRandomSuffix: false, allowOverwrite: true });
+    } catch (e) {
+      console.warn('Blob persist warning:', e.message);
+    }
+  }
+}
+
+// --- Optional MySQL Pool ---
+let dbPool = null;
+function getDbPool() {
+  if (dbPool) return dbPool;
+  const dbUrl = process.env.MYSQL_URL || process.env.DATABASE_URL;
+  const dbHost = process.env.DB_HOST;
+  if (!mysql) return null;
+  if (dbUrl) {
+    dbPool = mysql.createPool(dbUrl);
+    return dbPool;
+  }
+  if (dbHost) {
+    dbPool = mysql.createPool({
+      host: dbHost,
+      port: parseInt(process.env.DB_PORT || '3306', 10),
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'smart_budget_db',
+      waitForConnections: true,
+      connectionLimit: 10
+    });
+    return dbPool;
+  }
+  return null;
+}
 
 async function parseBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (req.body && typeof req.body === 'string') {
+    if (req.body.startsWith('{') || req.body.startsWith('[')) {
+      try { return JSON.parse(req.body); } catch {}
+    }
     const params = new URLSearchParams(req.body);
     const obj = {};
     for (const [k, v] of params.entries()) obj[k] = v;
@@ -93,7 +204,6 @@ async function parseBody(req) {
 }
 
 module.exports = async function handler(req, res) {
-  // CORS & Cache
   res.setHeader('Cache-Control', 'no-store');
 
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -105,6 +215,21 @@ module.exports = async function handler(req, res) {
   }
   if (!pathname.startsWith('/')) pathname = '/' + pathname;
 
+  if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+    let file = path.join(__dirname, '..', 'public', 'index.html');
+    if (!fs.existsSync(file)) {
+      file = path.join(__dirname, '..', 'web', 'index.html');
+    }
+    if (fs.existsSync(file)) {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.end(fs.readFileSync(file));
+    }
+  }
+
+  // Ensure persistent data is loaded from blob storage if available
+  await ensureBlobLoaded();
+
   const query = Object.fromEntries(parsedUrl.searchParams.entries());
   let body = {};
   if (req.method === 'POST') {
@@ -114,7 +239,7 @@ module.exports = async function handler(req, res) {
 
   const cookies = parseCookies(req.headers.cookie);
   const sessionToken = cookies['sid'];
-  const session = sessionToken ? store.sessions.get(sessionToken) : null;
+  const session = verifySession(sessionToken);
 
   function json(data, status = 200) {
     res.statusCode = status;
@@ -134,19 +259,8 @@ module.exports = async function handler(req, res) {
     return true;
   }
 
-  if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    let file = path.join(__dirname, '..', 'public', 'index.html');
-    if (!fs.existsSync(file)) {
-      file = path.join(__dirname, '..', 'web', 'index.html');
-    }
-    if (fs.existsSync(file)) {
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.end(fs.readFileSync(file));
-    }
-  }
-
   const endpoint = `${req.method} ${pathname}`;
+  const pool = getDbPool();
 
   try {
     switch (endpoint) {
@@ -163,6 +277,22 @@ module.exports = async function handler(req, res) {
           return error('Password must be at least 6 characters');
         }
 
+        const password_hash = hashPassword(password);
+
+        if (pool) {
+          try {
+            const [existing] = await pool.execute('SELECT user_id FROM users WHERE email = ?', [email]);
+            if (existing.length > 0) return error('An account with this email already exists', 409);
+            const [insertRes] = await pool.execute('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)', [name, email, password_hash]);
+            const token = signSession(insertRes.insertId, name);
+            res.setHeader('Set-Cookie', `sid=${token}; Path=/; HttpOnly; SameSite=Strict`);
+            return json({ name });
+          } catch (err) {
+            console.error('MySQL register error:', err);
+            return error('Database error during registration', 500);
+          }
+        }
+
         const existing = store.users.find(u => u.email === email);
         if (existing) return error('An account with this email already exists', 409);
 
@@ -170,13 +300,12 @@ module.exports = async function handler(req, res) {
           user_id: store.nextUserId++,
           name,
           email,
-          password_hash: hashPassword(password)
+          password_hash
         };
         store.users.push(user);
+        await persistBlob();
 
-        const token = crypto.randomBytes(32).toString('base64url');
-        store.sessions.set(token, { userId: user.user_id, name: user.name });
-
+        const token = signSession(user.user_id, user.name);
         res.setHeader('Set-Cookie', `sid=${token}; Path=/; HttpOnly; SameSite=Strict`);
         return json({ name: user.name });
       }
@@ -185,20 +314,32 @@ module.exports = async function handler(req, res) {
         const email = (params.email || '').trim().toLowerCase();
         const password = params.password || '';
 
+        if (pool) {
+          try {
+            const [rows] = await pool.execute('SELECT user_id, name, password_hash FROM users WHERE email = ?', [email]);
+            if (rows.length === 0 || !verifyPassword(password, rows[0].password_hash)) {
+              return error('Invalid email or password', 401);
+            }
+            const token = signSession(rows[0].user_id, rows[0].name);
+            res.setHeader('Set-Cookie', `sid=${token}; Path=/; HttpOnly; SameSite=Strict`);
+            return json({ name: rows[0].name });
+          } catch (err) {
+            console.error('MySQL login error:', err);
+            return error('Database error during login', 500);
+          }
+        }
+
         const user = store.users.find(u => u.email === email);
         if (!user || !verifyPassword(password, user.password_hash)) {
           return error('Invalid email or password', 401);
         }
 
-        const token = crypto.randomBytes(32).toString('base64url');
-        store.sessions.set(token, { userId: user.user_id, name: user.name });
-
+        const token = signSession(user.user_id, user.name);
         res.setHeader('Set-Cookie', `sid=${token}; Path=/; HttpOnly; SameSite=Strict`);
         return json({ name: user.name });
       }
 
       case 'POST /logout': {
-        if (sessionToken) store.sessions.delete(sessionToken);
         res.setHeader('Set-Cookie', 'sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict');
         return json({ ok: true });
       }
@@ -211,6 +352,19 @@ module.exports = async function handler(req, res) {
       case 'GET /categories': {
         if (!requireAuth()) return;
         const type = params.type;
+
+        if (pool) {
+          let sql = 'SELECT category_id, category_name, type, (user_id IS NOT NULL) AS custom FROM categories WHERE (user_id IS NULL OR user_id = ?) ';
+          const args = [session.userId];
+          if (type) {
+            sql += 'AND type = ? ';
+            args.push(type);
+          }
+          sql += 'ORDER BY category_name';
+          const [rows] = await pool.execute(sql, args);
+          return json(rows);
+        }
+
         const list = store.categories
           .filter(c => (c.user_id === null || c.user_id === session.userId) && (!type || c.type === type))
           .map(c => ({
@@ -231,6 +385,18 @@ module.exports = async function handler(req, res) {
         if (name.length > 50) return error('Category name is too long (max 50)');
         if (type !== 'INCOME' && type !== 'EXPENSE') return error('Type must be INCOME or EXPENSE');
 
+        if (pool) {
+          const [clash] = await pool.execute('SELECT category_id FROM categories WHERE user_id IS NULL AND category_name = ? AND type = ?', [name, type]);
+          if (clash.length > 0) return error('That category already exists');
+          try {
+            await pool.execute('INSERT INTO categories (user_id, category_name, type) VALUES (?, ?, ?)', [session.userId, name, type]);
+            return json({ ok: true });
+          } catch (err) {
+            if (err.errno === 1062) return error('You already have that category');
+            throw err;
+          }
+        }
+
         const clash = store.categories.find(c =>
           c.type === type &&
           c.category_name.toLowerCase() === name.toLowerCase() &&
@@ -244,6 +410,7 @@ module.exports = async function handler(req, res) {
           category_name: name,
           type
         });
+        await persistBlob();
         return json({ ok: true });
       }
 
@@ -315,7 +482,7 @@ module.exports = async function handler(req, res) {
         const date = params.date;
         if (!date) return error('Date is required');
 
-        const description = (params.description || '').trim();
+        const description = (params.description || '').trim() || null;
 
         if (id === 0) {
           store.transactions.push({
@@ -336,6 +503,8 @@ module.exports = async function handler(req, res) {
           tx.transaction_date = date;
           tx.description = description;
         }
+
+        await persistBlob();
         return json({ ok: true });
       }
 
@@ -345,6 +514,7 @@ module.exports = async function handler(req, res) {
         const index = store.transactions.findIndex(t => t.transaction_id === id && t.user_id === session.userId);
         if (index === -1) return error('Transaction not found');
         store.transactions.splice(index, 1);
+        await persistBlob();
         return json({ ok: true });
       }
 
@@ -391,7 +561,6 @@ module.exports = async function handler(req, res) {
           entries: data.entries
         })).sort((a, b) => b.total - a.total);
 
-        // Trend: last 6 months
         const trend = [];
         for (let i = 5; i >= 0; i--) {
           const d = new Date(year, month - 1 - i, 1);
@@ -413,7 +582,6 @@ module.exports = async function handler(req, res) {
           });
         }
 
-        // Budgets status
         const budgets = store.budgets
           .filter(b => b.user_id === session.userId && b.budget_month === month && b.budget_year === year)
           .map(b => {
@@ -535,6 +703,7 @@ module.exports = async function handler(req, res) {
             budget_year: year
           });
         }
+        await persistBlob();
         return json({ ok: true });
       }
 
@@ -544,6 +713,7 @@ module.exports = async function handler(req, res) {
         const index = store.budgets.findIndex(b => b.budget_id === id && b.user_id === session.userId);
         if (index === -1) return error('Budget not found');
         store.budgets.splice(index, 1);
+        await persistBlob();
         return json({ ok: true });
       }
 
@@ -603,6 +773,7 @@ module.exports = async function handler(req, res) {
             deadline
           });
         }
+        await persistBlob();
         return json({ ok: true });
       }
 
@@ -615,6 +786,7 @@ module.exports = async function handler(req, res) {
         const g = store.goals.find(x => x.goal_id === id && x.user_id === session.userId);
         if (!g) return error('Goal not found');
         g.saved_amount = Number((g.saved_amount + amount).toFixed(2));
+        await persistBlob();
         return json({ ok: true });
       }
 
@@ -624,6 +796,7 @@ module.exports = async function handler(req, res) {
         const index = store.goals.findIndex(g => g.goal_id === id && g.user_id === session.userId);
         if (index === -1) return error('Goal not found');
         store.goals.splice(index, 1);
+        await persistBlob();
         return json({ ok: true });
       }
 
